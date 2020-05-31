@@ -2,10 +2,8 @@ package org.knowm.xchange.huobi;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 import org.knowm.xchange.currency.Currency;
 import org.knowm.xchange.currency.CurrencyPair;
 import org.knowm.xchange.dto.Order;
@@ -20,15 +18,19 @@ import org.knowm.xchange.dto.marketdata.Trades.TradeSortType;
 import org.knowm.xchange.dto.meta.CurrencyMetaData;
 import org.knowm.xchange.dto.meta.CurrencyPairMetaData;
 import org.knowm.xchange.dto.meta.ExchangeMetaData;
+import org.knowm.xchange.dto.meta.FeeTier;
 import org.knowm.xchange.dto.trade.LimitOrder;
 import org.knowm.xchange.dto.trade.MarketOrder;
 import org.knowm.xchange.dto.trade.OpenOrders;
+import org.knowm.xchange.dto.trade.StopOrder;
+import org.knowm.xchange.dto.trade.StopOrder.Intention;
 import org.knowm.xchange.dto.trade.UserTrade;
 import org.knowm.xchange.dto.trade.UserTrades;
 import org.knowm.xchange.exceptions.ExchangeException;
 import org.knowm.xchange.huobi.dto.account.HuobiBalanceRecord;
 import org.knowm.xchange.huobi.dto.account.HuobiBalanceSum;
 import org.knowm.xchange.huobi.dto.account.HuobiFundingRecord;
+import org.knowm.xchange.huobi.dto.marketdata.HuobiAllTicker;
 import org.knowm.xchange.huobi.dto.marketdata.HuobiAsset;
 import org.knowm.xchange.huobi.dto.marketdata.HuobiAssetPair;
 import org.knowm.xchange.huobi.dto.marketdata.HuobiTicker;
@@ -50,6 +52,31 @@ public class HuobiAdapters {
     builder.timestamp(huobiTicker.getTs());
     builder.currencyPair(currencyPair);
     return builder.build();
+  }
+
+  public static List<Ticker> adaptAllTickers(HuobiAllTicker[] allTickers) {
+
+    return Arrays.stream(allTickers)
+        .filter(
+            huobiTicker ->
+                !"hb10".equals(huobiTicker.getSymbol()) // Fix on data error retrieved from api
+            )
+        .map(
+            huobiTicker ->
+                new Ticker.Builder()
+                    .currencyPair(adaptCurrencyPair(huobiTicker.getSymbol()))
+                    .open(huobiTicker.getOpen())
+                    .ask(huobiTicker.getAsk().getPrice())
+                    .bid(huobiTicker.getBid().getPrice())
+                    .askSize(huobiTicker.getAsk().getVolume())
+                    .bidSize(huobiTicker.getBid().getVolume())
+                    .last(huobiTicker.getClose())
+                    .high(huobiTicker.getHigh())
+                    .low(huobiTicker.getLow())
+                    .volume(huobiTicker.getVol())
+                    .timestamp(huobiTicker.getTs())
+                    .build())
+        .collect(Collectors.toList());
   }
 
   static ExchangeMetaData adaptToExchangeMetaData(
@@ -84,14 +111,19 @@ public class HuobiAdapters {
 
   private static CurrencyPairMetaData adaptPair(
       HuobiAssetPair pair, CurrencyPairMetaData metadata) {
-    BigDecimal minQty = metadata == null ? null : metadata.getMinimumAmount();
-
+    BigDecimal minQty =
+        metadata == null
+            ? null
+            : metadata
+                .getMinimumAmount()
+                .setScale(Integer.parseInt(pair.getAmountPrecision()), RoundingMode.DOWN);
+    FeeTier[] feeTiers = metadata == null ? null : metadata.getFeeTiers();
     return new CurrencyPairMetaData(
         fee,
         minQty, // Min amount
         null, // Max amount
-        new Integer(pair.getPricePrecision()) // Price scale
-        );
+        new Integer(pair.getPricePrecision()), // Price scale
+        feeTiers);
   }
 
   private static Currency adaptCurrency(String currency) {
@@ -103,6 +135,10 @@ public class HuobiAdapters {
     for (Map.Entry<String, HuobiBalanceSum> record : huobiWallet.entrySet()) {
       try {
         Currency currency = adaptCurrency(record.getKey());
+        if (currency == null) {
+          // Avoid creating Balance objects with null currency.
+          continue;
+        }
         Balance balance =
             new Balance(
                 currency,
@@ -114,7 +150,7 @@ public class HuobiAdapters {
         // It might be a new currency. Ignore the exception and continue with other currency.
       }
     }
-    return new Wallet(balances);
+    return Wallet.Builder.from(balances).build();
   }
 
   public static Map<String, HuobiBalanceSum> adaptBalance(HuobiBalanceRecord[] huobiBalance) {
@@ -162,28 +198,53 @@ public class HuobiAdapters {
                   .divide(openOrder.getFieldAmount(), 8, BigDecimal.ROUND_DOWN),
               openOrder.getFieldAmount(),
               openOrder.getFieldFees(),
-              null);
+              adaptOrderStatus(openOrder.getState()),
+              openOrder.getClOrdId());
     }
     if (openOrder.isLimit()) {
       order =
           new LimitOrder(
               orderType,
               openOrder.getAmount(),
-              openOrder.getFieldAmount(),
               currencyPair,
               String.valueOf(openOrder.getId()),
               openOrder.getCreatedAt(),
-              openOrder.getPrice());
-
-      if (openOrder.getFieldAmount().compareTo(BigDecimal.ZERO) > 0) {
-        order.setAveragePrice(
-            openOrder
-                .getFieldCashAmount()
-                .divide(openOrder.getFieldAmount(), 8, BigDecimal.ROUND_DOWN));
-      }
+              openOrder.getPrice(),
+              openOrder
+                  .getFieldCashAmount()
+                  .divide(openOrder.getFieldAmount(), 8, BigDecimal.ROUND_DOWN),
+              openOrder.getFieldAmount(),
+              openOrder.getFieldFees(),
+              adaptOrderStatus(openOrder.getState()),
+              openOrder.getClOrdId());
     }
-    if (order != null) {
-      order.setOrderStatus(adaptOrderStatus(openOrder.getState()));
+    if (openOrder.isStop()) {
+      order =
+          new StopOrder(
+              orderType,
+              openOrder.getAmount(),
+              currencyPair,
+              String.valueOf(openOrder.getId()),
+              openOrder.getCreatedAt(),
+              openOrder.getStopPrice(),
+              openOrder.getPrice(),
+              openOrder
+                  .getFieldCashAmount()
+                  .divide(openOrder.getFieldAmount(), 8, BigDecimal.ROUND_DOWN),
+              openOrder.getFieldAmount(),
+              openOrder.getFieldFees(),
+              adaptOrderStatus(openOrder.getState()),
+              openOrder.getClOrdId(),
+              openOrder.getOperator().equals("lte") ? Intention.STOP_LOSS : Intention.TAKE_PROFIT);
+    }
+
+    if (openOrder.getFieldAmount().compareTo(BigDecimal.ZERO) == 0) {
+      order.setAveragePrice(BigDecimal.ZERO);
+    } else {
+      order.setAveragePrice(
+          openOrder
+              .getFieldCashAmount()
+              .divide(openOrder.getFieldAmount(), 8, BigDecimal.ROUND_DOWN));
     }
     return order;
   }
@@ -201,16 +262,17 @@ public class HuobiAdapters {
             .multiply(order.getLimitPrice())
             .multiply(fee)
             .setScale(8, RoundingMode.DOWN);
-    return new UserTrade(
-        order.getType(),
-        order.getCumulativeAmount(),
-        order.getCurrencyPair(),
-        order.getLimitPrice(),
-        order.getTimestamp(),
-        null, // Trade id
-        order.getId(), // Original order id
-        feeAmount,
-        order.getCurrencyPair().counter);
+    return new UserTrade.Builder()
+        .type(order.getType())
+        .originalAmount(order.getCumulativeAmount())
+        .currencyPair(order.getCurrencyPair())
+        .price(order.getLimitPrice())
+        .timestamp(order.getTimestamp())
+        .id("") // Trade id
+        .orderId(order.getId()) // Original order id
+        .feeAmount(feeAmount)
+        .feeCurrency(order.getCurrencyPair().counter)
+        .build();
   }
 
   private static OrderStatus adaptOrderStatus(String huobiStatus) {
@@ -241,7 +303,7 @@ public class HuobiAdapters {
     return result;
   }
 
-  private static OrderType adaptOrderType(String orderType) {
+  public static OrderType adaptOrderType(String orderType) {
     if (orderType.startsWith("buy")) {
       return OrderType.BID;
     }

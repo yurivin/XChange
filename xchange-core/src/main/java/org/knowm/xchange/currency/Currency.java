@@ -1,5 +1,7 @@
 package org.knowm.xchange.currency;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
 import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Collections;
@@ -16,6 +18,7 @@ import java.util.TreeSet;
  */
 public class Currency implements Comparable<Currency>, Serializable {
 
+  private static final long serialVersionUID = -7340731832345284129L;
   private static final Map<String, Currency> currencies = new HashMap<>();
 
   /** Global currency codes */
@@ -30,6 +33,7 @@ public class Currency implements Comparable<Currency>, Serializable {
   public static final Currency AOA = createCurrency("AOA", "Angolan Kwanza", null);
   public static final Currency ARN = createCurrency("ARN", "Aeron", null);
   public static final Currency ARS = createCurrency("ARS", "Argentine Peso", null);
+  public static final Currency ATOM = createCurrency("ATOM", "Cosmos", null);
   public static final Currency AUD = createCurrency("AUD", "Australian Dollar", null);
   public static final Currency AUR = createCurrency("AUR", "Auroracoin", null);
   public static final Currency AVT = createCurrency("AVT", "Aventus", null);
@@ -109,6 +113,7 @@ public class Currency implements Comparable<Currency>, Serializable {
   public static final Currency GNO = createCurrency("GNO", "Gnosis", null);
   public static final Currency GNT = createCurrency("GNT", "Golem", null);
   public static final Currency GTQ = createCurrency("GTQ", "Guatemalan Quetzal", null);
+  public static final Currency GVT = createCurrency("GVT", "Genesis Vision", null);
   public static final Currency GYD = createCurrency("GYD", "Guyanaese Dollar", null);
   public static final Currency HKD = createCurrency("HKD", "Hong Kong Dollar", null);
   public static final Currency HVN = createCurrency("HVN", "Hive", null);
@@ -169,6 +174,7 @@ public class Currency implements Comparable<Currency>, Serializable {
   public static final Currency MYR = createCurrency("MYR", "Malaysian Ringgit", null);
   public static final Currency MZN = createCurrency("MZN", "Mozambican Metical", null);
   public static final Currency NAD = createCurrency("NAD", "Namibian Dollar", null);
+  public static final Currency NOBS = createCurrency("NOBS", "No BS Crypto", null);
   public static final Currency NEO = createCurrency("NEO", "NEO", null);
   public static final Currency NGN = createCurrency("NGN", "Nigerian Naira", null);
   public static final Currency NIO = createCurrency("NIO", "Nicaraguan Córdoba", null);
@@ -208,6 +214,7 @@ public class Currency implements Comparable<Currency>, Serializable {
   public static final Currency SGD = createCurrency("SGD", "Singapore Dollar", null);
   public static final Currency SHP = createCurrency("SHP", "Saint Helena Pound", null);
   public static final Currency SLL = createCurrency("SLL", "Sierra Leonean Leone", null);
+  public static final Currency SMART = createCurrency("SMART", "SmartCash", null);
   public static final Currency SOS = createCurrency("SOS", "Somali Shilling", null);
   public static final Currency SRD = createCurrency("SRD", "Surinamese Dollar", null);
   public static final Currency START = createCurrency("START", "startcoin", null);
@@ -231,6 +238,7 @@ public class Currency implements Comparable<Currency>, Serializable {
   public static final Currency UAH = createCurrency("UAH", "Ukrainian Hryvnia", null);
   public static final Currency UGX = createCurrency("UGX", "Ugandan Shilling", null);
   public static final Currency USD = createCurrency("USD", "United States Dollar", null);
+  public static final Currency USDC = createCurrency("USDC", "USD Coin", null, "UDC");
   public static final Currency USDT = createCurrency("USDT", "Tether USD Anchor", null);
   public static final Currency USDE = createCurrency("USDE", "Unitary Status Dollar eCoin", null);
   public static final Currency UTC = createCurrency("UTC", "Ultracoin", null);
@@ -239,6 +247,7 @@ public class Currency implements Comparable<Currency>, Serializable {
   public static final Currency VEF = createCurrency("VEF", "Venezuelan Bolívar", null);
   public static final Currency VET = createCurrency("VET", "Hub Culture's Vet", null, "VEN");
   public static final Currency VEN = createCurrency("VEN", "Hub Culture's Ven", null, "XVN");
+  public static final Currency XTZ = createCurrency("XTZ", "Tezos", null);
   public static final Currency XVN = getInstance("XVN");
   public static final Currency VIB = createCurrency("VIB", "Viberate", null);
   public static final Currency VND = createCurrency("VND", "Vietnamese Dong", null);
@@ -272,8 +281,11 @@ public class Currency implements Comparable<Currency>, Serializable {
   public static final Currency M18 = createCurrency("M18", "June 29th", null);
   public static final Currency U18 = createCurrency("U18", "September 28th", null);
   public static final Currency Z18 = createCurrency("Z18", "December 28th", null);
+  public static final Currency H19 = createCurrency("H19", "March 29th", null);
+  public static final Currency M19 = createCurrency("M19", "June 28th", null);
 
   // Cryptos
+  public static final Currency BNK = createCurrency("BNK", "Bankera Coin", null);
   public static final Currency BNB = createCurrency("BNB", "Binance Coin", null);
   public static final Currency QSP = createCurrency("QSP", "Quantstamp", null);
   public static final Currency IOTA = createCurrency("IOTA", "Iota", null);
@@ -292,7 +304,9 @@ public class Currency implements Comparable<Currency>, Serializable {
   public static final Currency ELF = createCurrency("ELF", "aelf", null);
   public static final Currency STORJ = createCurrency("STORJ", "Storj", null);
   public static final Currency MOD = createCurrency("MOD", "Modum", null);
+
   private final String code;
+
   private final CurrencyAttributes attributes;
 
   /** Public constructor. Links to an existing currency. */
@@ -321,6 +335,7 @@ public class Currency implements Comparable<Currency>, Serializable {
   }
 
   /** Returns a Currency instance for the given currency code. */
+  @JsonCreator
   public static Currency getInstance(String currencyCode) {
 
     Currency currency = getInstanceNoCreate(currencyCode.toUpperCase());
@@ -371,6 +386,7 @@ public class Currency implements Comparable<Currency>, Serializable {
   }
 
   /** Gets the currency code originally used to acquire this object. */
+  @JsonValue
   public String getCurrencyCode() {
 
     return code;
@@ -477,6 +493,8 @@ public class Currency implements Comparable<Currency>, Serializable {
   }
 
   private static class CurrencyAttributes implements Serializable {
+
+    private static final long serialVersionUID = -5575649542242146958L;
 
     public final Set<String> codes;
     public final String isoCode;

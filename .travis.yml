@@ -10,9 +10,11 @@ else
     mvn clean verify --batch-mode --settings etc/settings.xml;
 fi"
 
+dist: trusty
+
 jdk:
   - oraclejdk8
-  - oraclejdk10
+  - openjdk11
 
 # whitelist
 branches:

@@ -1,10 +1,12 @@
 package org.knowm.xchange.gemini.v1;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -14,6 +16,7 @@ import org.knowm.xchange.dto.Order;
 import org.knowm.xchange.dto.Order.OrderStatus;
 import org.knowm.xchange.dto.Order.OrderType;
 import org.knowm.xchange.dto.account.Balance;
+import org.knowm.xchange.dto.account.Fee;
 import org.knowm.xchange.dto.account.FundingRecord;
 import org.knowm.xchange.dto.account.Wallet;
 import org.knowm.xchange.dto.marketdata.OrderBook;
@@ -33,6 +36,7 @@ import org.knowm.xchange.dto.trade.UserTrade;
 import org.knowm.xchange.dto.trade.UserTrades;
 import org.knowm.xchange.exceptions.NotYetImplementedForExchangeException;
 import org.knowm.xchange.gemini.v1.dto.account.GeminiBalancesResponse;
+import org.knowm.xchange.gemini.v1.dto.account.GeminiTrailingVolumeResponse;
 import org.knowm.xchange.gemini.v1.dto.account.GeminiTransfer;
 import org.knowm.xchange.gemini.v1.dto.marketdata.GeminiDepth;
 import org.knowm.xchange.gemini.v1.dto.marketdata.GeminiLendLevel;
@@ -260,7 +264,14 @@ public final class GeminiAdapters {
     Date date =
         DateUtils.fromMillisUtc(trade.getTimestamp() * 1000L); // Gemini uses Unix timestamps
     final String tradeId = String.valueOf(trade.getTradeId());
-    return new Trade(orderType, amount, currencyPair, price, date, tradeId);
+    return new Trade.Builder()
+        .type(orderType)
+        .originalAmount(amount)
+        .currencyPair(currencyPair)
+        .price(price)
+        .timestamp(date)
+        .id(tradeId)
+        .build();
   }
 
   public static Trades adaptTrades(GeminiTrade[] trades, CurrencyPair currencyPair) {
@@ -323,7 +334,7 @@ public final class GeminiAdapters {
       balances.add(new Balance(Currency.getInstance(currencyName), balanceTotal, balanceAvailable));
     }
 
-    return new Wallet(balances);
+    return Wallet.Builder.from(balances).build();
   }
 
   public static OpenOrders adaptOrders(GeminiOrderStatusResponse[] activeOrders) {
@@ -373,18 +384,19 @@ public final class GeminiAdapters {
     for (GeminiTradeResponse trade : trades) {
       OrderType orderType = trade.getType().equalsIgnoreCase("buy") ? OrderType.BID : OrderType.ASK;
       Date timestamp = convertBigDecimalTimestampToDate(trade.getTimestamp());
-      final BigDecimal fee = trade.getFeeAmount() == null ? null : trade.getFeeAmount();
+      final BigDecimal fee = trade.getFeeAmount();
       pastTrades.add(
-          new UserTrade(
-              orderType,
-              trade.getAmount(),
-              currencyPair,
-              trade.getPrice(),
-              timestamp,
-              trade.getTradeId(),
-              trade.getOrderId(),
-              fee,
-              Currency.getInstance(trade.getFeeCurrency())));
+          new UserTrade.Builder()
+              .type(orderType)
+              .originalAmount(trade.getAmount())
+              .currencyPair(currencyPair)
+              .price(trade.getPrice())
+              .timestamp(timestamp)
+              .id(trade.getTradeId())
+              .orderId(trade.getOrderId())
+              .feeAmount(fee)
+              .feeCurrency(Currency.getInstance(trade.getFeeCurrency()))
+              .build());
     }
 
     return new UserTrades(pastTrades, TradeSortType.SortByTimestamp);
@@ -413,6 +425,22 @@ public final class GeminiAdapters {
     }
 
     return metaData;
+  }
+
+  public static Map<CurrencyPair, Fee> AdaptDynamicTradingFees(
+      GeminiTrailingVolumeResponse volumeResponse, List<CurrencyPair> currencyPairs) {
+    Map<CurrencyPair, Fee> result = new Hashtable<>();
+    BigDecimal bpsToFraction =
+        BigDecimal.ONE.divide(BigDecimal.ONE.scaleByPowerOfTen(4), 4, RoundingMode.HALF_EVEN);
+    Fee feeAcrossCurrencies =
+        new Fee(
+            volumeResponse.apiMakerFeeBPS.multiply(bpsToFraction),
+            volumeResponse.apiTakerFeeBPS.multiply(bpsToFraction));
+    for (CurrencyPair currencyPair : currencyPairs) {
+      result.put(currencyPair, feeAcrossCurrencies);
+    }
+
+    return result;
   }
 
   public static FundingRecord adapt(GeminiTransfer transfer) {

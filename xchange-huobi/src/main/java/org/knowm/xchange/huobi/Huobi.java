@@ -16,10 +16,8 @@ import org.knowm.xchange.huobi.dto.account.results.HuobiCreateWithdrawResult;
 import org.knowm.xchange.huobi.dto.account.results.HuobiDepositAddressResult;
 import org.knowm.xchange.huobi.dto.account.results.HuobiDepositAddressWithTagResult;
 import org.knowm.xchange.huobi.dto.account.results.HuobiFundingHistoryResult;
-import org.knowm.xchange.huobi.dto.marketdata.results.HuobiAssetPairsResult;
-import org.knowm.xchange.huobi.dto.marketdata.results.HuobiAssetsResult;
-import org.knowm.xchange.huobi.dto.marketdata.results.HuobiDepthResult;
-import org.knowm.xchange.huobi.dto.marketdata.results.HuobiTickerResult;
+import org.knowm.xchange.huobi.dto.account.results.HuobiWithdrawFeeRangeResult;
+import org.knowm.xchange.huobi.dto.marketdata.results.*;
 import org.knowm.xchange.huobi.dto.trade.HuobiCreateOrderRequest;
 import org.knowm.xchange.huobi.dto.trade.results.HuobiCancelOrderResult;
 import org.knowm.xchange.huobi.dto.trade.results.HuobiOrderInfoResult;
@@ -36,8 +34,17 @@ public interface Huobi {
   HuobiTickerResult getTicker(@QueryParam("symbol") String symbol) throws IOException;
 
   @GET
+  @Path("market/tickers")
+  HuobiAllTickersResult getAllTickers() throws IOException;
+
+  @GET
   @Path("market/depth")
   HuobiDepthResult getDepth(@QueryParam("symbol") String symbol, @QueryParam("type") String type)
+      throws IOException;
+
+  @GET
+  @Path("market/history/trade")
+  HuobiTradesResult getTrades(@QueryParam("symbol") String symbol, @QueryParam("size") int size)
       throws IOException;
 
   @GET
@@ -97,6 +104,18 @@ public interface Huobi {
       throws IOException;
 
   @GET
+  @Path("v1/dw/withdraw-virtual/fee-range")
+  @Consumes(MediaType.APPLICATION_JSON)
+  HuobiWithdrawFeeRangeResult getWithdrawFeeRange(
+      @QueryParam("currency") String currency,
+      @QueryParam("AccessKeyId") String apiKey,
+      @QueryParam("SignatureMethod") String signatureMethod,
+      @QueryParam("SignatureVersion") int signatureVersion,
+      @QueryParam("Timestamp") String nonce,
+      @QueryParam("Signature") ParamsDigest signature)
+      throws IOException;
+
+  @GET
   @Path("v1/account/accounts")
   HuobiAccountResult getAccount(
       @QueryParam("AccessKeyId") String apiKey,
@@ -120,7 +139,23 @@ public interface Huobi {
   @GET
   @Path("v1/order/orders")
   HuobiOrdersResult getOpenOrders(
+      @QueryParam("symbol") String symbol,
       @QueryParam("states") String states,
+      @QueryParam("AccessKeyId") String apiKey,
+      @QueryParam("SignatureMethod") String signatureMethod,
+      @QueryParam("SignatureVersion") int signatureVersion,
+      @QueryParam("Timestamp") String nonce,
+      @QueryParam("Signature") ParamsDigest signature)
+      throws IOException;
+
+  @GET
+  @Path("v1/order/orders")
+  HuobiOrdersResult getOrders(
+      @QueryParam("symbol") String symbol,
+      @QueryParam("states") String states,
+      @QueryParam("start-time") Long startTime,
+      @QueryParam("from") String from,
+      @QueryParam("direct") String direct,
       @QueryParam("AccessKeyId") String apiKey,
       @QueryParam("SignatureMethod") String signatureMethod,
       @QueryParam("SignatureVersion") int signatureVersion,

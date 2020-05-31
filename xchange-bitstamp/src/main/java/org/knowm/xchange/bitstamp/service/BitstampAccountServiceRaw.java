@@ -27,9 +27,7 @@ import org.knowm.xchange.exceptions.FundsExceededException;
 import si.mazi.rescu.RestProxyFactory;
 import si.mazi.rescu.SynchronizedValueFactory;
 
-/**
- * @author gnandiga
- */
+/** @author gnandiga */
 public class BitstampAccountServiceRaw extends BitstampBaseService {
 
   private final BitstampDigest signatureCreator;
@@ -41,6 +39,8 @@ public class BitstampAccountServiceRaw extends BitstampBaseService {
 
   /**
    * Constructor
+   *
+   * @param exchange
    */
   protected BitstampAccountServiceRaw(Exchange exchange) {
 
@@ -90,7 +90,7 @@ public class BitstampAccountServiceRaw extends BitstampBaseService {
     BitstampWithdrawal response = null;
 
     if (currency.equals(Currency.XRP)) {
-      BitstampRippleDepositAddress addressAndDt = new BitstampRippleDepositAddress(address);
+      BitstampRippleDepositAddress addressAndDt = new BitstampRippleDepositAddress(null, address);
       response =
           withdrawRippleFunds(
               amount, addressAndDt.getAddress(), Long.toString(addressAndDt.getDestinationTag()));
@@ -242,6 +242,24 @@ public class BitstampAccountServiceRaw extends BitstampBaseService {
     }
   }
 
+  public BitstampDepositAddress getBitstampBitcoinCashDepositAddress() throws IOException {
+
+    try {
+      final BitstampDepositAddress response =
+          bitstampAuthenticated.getBitcoinCashDepositAddress(
+              exchange.getExchangeSpecification().getApiKey(),
+              signatureCreator,
+              exchange.getNonceFactory());
+      if (response.getError() != null) {
+        throw new ExchangeException(
+            "Requesting Bitcoin deposit address failed: " + response.getError());
+      }
+      return response;
+    } catch (BitstampException e) {
+      throw handleError(e);
+    }
+  }
+
   public BitstampDepositAddress getBitstampLitecoinDepositAddress() throws IOException {
 
     try {
@@ -288,7 +306,7 @@ public class BitstampAccountServiceRaw extends BitstampBaseService {
 
   /**
    * @return true if withdrawal was successful. Note that due to a bug on Bitstamp's side,
-   * withdrawal always fails if two-factor authentication is enabled for the account.
+   *     withdrawal always fails if two-factor authentication is enabled for the account.
    */
   public boolean withdrawToRipple(BigDecimal amount, Currency currency, String rippleAddress)
       throws IOException {
@@ -338,7 +356,8 @@ public class BitstampAccountServiceRaw extends BitstampBaseService {
   }
 
   public BitstampUserTransaction[] getBitstampUserTransactions(
-      Long numberOfTransactions, CurrencyPair pair, Long offset, String sort) throws IOException {
+      Long numberOfTransactions, CurrencyPair pair, Long offset, String sort, Long sinceTimestamp)
+      throws IOException {
 
     try {
       return bitstampAuthenticatedV2.getUserTransactions(
@@ -348,18 +367,25 @@ public class BitstampAccountServiceRaw extends BitstampBaseService {
           new BitstampV2.Pair(pair),
           numberOfTransactions,
           offset,
-          sort);
+          sort,
+          sinceTimestamp);
     } catch (BitstampException e) {
       throw handleError(e);
     }
   }
 
   public BitstampUserTransaction[] getBitstampUserTransactions(
-      Long numberOfTransactions, Long offset, String sort) throws IOException {
+      Long numberOfTransactions, Long offset, String sort, Long sinceTimestamp) throws IOException {
 
     try {
       return bitstampAuthenticatedV2.getUserTransactions(
-          apiKey, signatureCreator, nonceFactory, numberOfTransactions, offset, sort);
+          apiKey,
+          signatureCreator,
+          nonceFactory,
+          numberOfTransactions,
+          offset,
+          sort,
+          sinceTimestamp);
     } catch (BitstampException e) {
       throw handleError(e);
     }
@@ -386,6 +412,21 @@ public class BitstampAccountServiceRaw extends BitstampBaseService {
       String countryAlpha2)
       throws IOException {
 
+    return withdrawSepa(amount, name, IBAN, BIK, address, postalCode, city, countryAlpha2, null);
+  }
+
+  public BitstampWithdrawal withdrawSepa(
+      BigDecimal amount,
+      String name,
+      String IBAN,
+      String BIK,
+      String address,
+      String postalCode,
+      String city,
+      String countryAlpha2,
+      String comment)
+      throws IOException {
+
     try {
       BitstampWithdrawal response =
           bitstampAuthenticatedV2.bankWithdrawal(
@@ -393,7 +434,7 @@ public class BitstampAccountServiceRaw extends BitstampBaseService {
               signatureCreator,
               exchange.getNonceFactory(),
               amount,
-              AccountCurrency.EUR,
+              BitstampAuthenticatedV2.AccountCurrency.EUR,
               name,
               IBAN,
               BIK,
@@ -407,7 +448,8 @@ public class BitstampAccountServiceRaw extends BitstampBaseService {
               null,
               null,
               null,
-              null);
+              null,
+              comment);
 
       return checkAndReturnWithdrawal(response);
     } catch (BitstampException e) {
@@ -432,6 +474,42 @@ public class BitstampAccountServiceRaw extends BitstampBaseService {
       BankCurrency bankReceiverCurrency)
       throws IOException {
 
+    return withdrawInternational(
+        amount,
+        name,
+        IBAN,
+        BIK,
+        address,
+        postalCode,
+        city,
+        countryAlpha2,
+        bankName,
+        bankAddress,
+        bankPostalCode,
+        bankCity,
+        bankCountryAlpha2,
+        bankReceiverCurrency,
+        null);
+  }
+
+  public BitstampWithdrawal withdrawInternational(
+      BigDecimal amount,
+      String name,
+      String IBAN,
+      String BIK,
+      String address,
+      String postalCode,
+      String city,
+      String countryAlpha2,
+      String bankName,
+      String bankAddress,
+      String bankPostalCode,
+      String bankCity,
+      String bankCountryAlpha2,
+      BankCurrency bankReceiverCurrency,
+      String comment)
+      throws IOException {
+
     try {
       BitstampWithdrawal response =
           bitstampAuthenticatedV2.bankWithdrawal(
@@ -453,7 +531,8 @@ public class BitstampAccountServiceRaw extends BitstampBaseService {
               bankPostalCode,
               bankCity,
               bankCountryAlpha2,
-              bankReceiverCurrency);
+              bankReceiverCurrency,
+              comment);
 
       return checkAndReturnWithdrawal(response);
     } catch (BitstampException e) {

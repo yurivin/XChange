@@ -32,6 +32,7 @@ import org.knowm.xchange.dto.marketdata.Trades.TradeSortType;
 import org.knowm.xchange.dto.meta.CurrencyMetaData;
 import org.knowm.xchange.dto.meta.CurrencyPairMetaData;
 import org.knowm.xchange.dto.meta.ExchangeMetaData;
+import org.knowm.xchange.dto.meta.FeeTier;
 import org.knowm.xchange.dto.trade.LimitOrder;
 import org.knowm.xchange.dto.trade.UserTrade;
 
@@ -57,15 +58,14 @@ public class CCEXAdapters {
         cCEXTrade.getOrderType().equalsIgnoreCase("BUY") ? OrderType.BID : OrderType.ASK;
     Date timestamp = stringToDate(cCEXTrade.getTimestamp());
 
-    Trade trade =
-        new Trade(
-            type,
-            cCEXTrade.getQuantity(),
-            currencyPair,
-            cCEXTrade.getPrice(),
-            timestamp,
-            cCEXTrade.getId());
-    return trade;
+    return new Trade.Builder()
+        .type(type)
+        .originalAmount(cCEXTrade.getQuantity())
+        .currencyPair(currencyPair)
+        .price(cCEXTrade.getPrice())
+        .timestamp(timestamp)
+        .id(cCEXTrade.getId())
+        .build();
   }
 
   /**
@@ -112,12 +112,20 @@ public class CCEXAdapters {
   public static ExchangeMetaData adaptToExchangeMetaData(
       ExchangeMetaData exchangeMetaData, List<CCEXMarket> products) {
     Map<CurrencyPair, CurrencyPairMetaData> currencyPairs = new HashMap<>();
+    Map<CurrencyPair, CurrencyPairMetaData> existingCurrencyPairMetadata =
+        exchangeMetaData.getCurrencyPairs();
     Map<Currency, CurrencyMetaData> currencies = new HashMap<>();
 
     for (CCEXMarket product : products) {
       BigDecimal minSize = product.getMinTradeSize();
-      CurrencyPairMetaData cpmd = new CurrencyPairMetaData(null, minSize, null, 0);
       CurrencyPair pair = adaptCurrencyPair(product);
+      CurrencyPairMetaData existingMetaForPair = existingCurrencyPairMetadata.get(pair);
+      FeeTier[] existingFeeTiers = null;
+      if (existingMetaForPair != null) {
+        existingFeeTiers = existingMetaForPair.getFeeTiers();
+      }
+      CurrencyPairMetaData cpmd =
+          new CurrencyPairMetaData(null, minSize, null, 0, existingFeeTiers);
       currencyPairs.put(pair, cpmd);
       currencies.put(pair.base, null);
       currencies.put(pair.counter, null);
@@ -160,7 +168,7 @@ public class CCEXAdapters {
               balance.getPending()));
     }
 
-    return new Wallet(wallets);
+    return Wallet.Builder.from(wallets).build();
   }
 
   public static List<LimitOrder> adaptOpenOrders(List<CCEXOpenorder> cCexOpenOrders) {
@@ -217,16 +225,17 @@ public class CCEXAdapters {
       price = trade.getLimit();
     }
 
-    return new UserTrade(
-        orderType,
-        amount,
-        currencyPair,
-        price,
-        date,
-        orderId,
-        orderId,
-        trade.getCommission(),
-        currencyPair.counter);
+    return new UserTrade.Builder()
+        .type(orderType)
+        .originalAmount(amount)
+        .currencyPair(currencyPair)
+        .price(price)
+        .timestamp(date)
+        .id(orderId)
+        .orderId(orderId)
+        .feeAmount(trade.getCommission())
+        .feeCurrency(currencyPair.counter)
+        .build();
   }
 
   public static Ticker adaptTicker(CCEXPriceResponse cCEXTicker, CurrencyPair currencyPair) {

@@ -4,13 +4,7 @@ import static org.apache.commons.lang3.StringUtils.join;
 
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import org.knowm.xchange.Exchange;
 import org.knowm.xchange.currency.Currency;
 import org.knowm.xchange.currency.CurrencyPair;
@@ -74,13 +68,15 @@ public class ExmoMarketDataServiceRaw extends BaseExmoService {
         tradingFee = currencyPairs.get(currencyPair).getTradingFee();
       }
 
+      CurrencyPairMetaData staticMeta = currencyPairs.get(currencyPair);
       // min_quantity or min_amount ???
       CurrencyPairMetaData currencyPairMetaData =
           new CurrencyPairMetaData(
               tradingFee,
               new BigDecimal(data.get("min_quantity")),
               new BigDecimal(data.get("max_quantity")),
-              priceScale);
+              priceScale,
+              staticMeta != null ? staticMeta.getFeeTiers() : null);
 
       currencyPairs.put(currencyPair, currencyPairMetaData);
 
@@ -119,16 +115,17 @@ public class ExmoMarketDataServiceRaw extends BaseExmoService {
         String quantity = tradeData.get("quantity").toString();
         String amount = tradeData.get("amount").toString();
 
-        String date = tradeData.get("date").toString();
+        long unixTimestamp = Long.parseLong(tradeData.get("date").toString());
 
         results.add(
-            new Trade(
-                type.equalsIgnoreCase("sell") ? Order.OrderType.ASK : Order.OrderType.BID,
-                new BigDecimal(quantity),
-                currencyPair,
-                new BigDecimal(price),
-                new Date(Long.valueOf(date)),
-                id));
+            new Trade.Builder()
+                .type(type.equalsIgnoreCase("sell") ? Order.OrderType.ASK : Order.OrderType.BID)
+                .originalAmount(new BigDecimal(quantity))
+                .currencyPair(currencyPair)
+                .price(new BigDecimal(price))
+                .timestamp(new Date(unixTimestamp * 1000L))
+                .id(id)
+                .build());
       }
     }
 
